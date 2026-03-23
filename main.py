@@ -3,7 +3,7 @@ from PyPDF2 import PdfReader
 from docx import Document
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import InlineKeyboardButton, LinkPreviewOptions, BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from supabase import create_client, Client
@@ -65,17 +65,41 @@ def create_docx(text: str, title: str):
     return doc_io
 
 # 3. ОБРАБОТЧИКИ
+
+# --- ОБНОВЛЕННЫЙ ОНБОРДИНГ ---
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     try:
         supabase.table("users").upsert({"tg_id": message.from_user.id, "username": message.from_user.username}).execute()
     except: pass
-    await message.answer("🚀 **JobHack AI готов к работе!**\n\nПришли свое PDF-резюме или напиши текстом: какой у тебя опыт?", parse_mode="Markdown")
+    
+    welcome_text = (
+        "👋 **Добро пожаловать в JobHack AI!**\n\n"
+        "Я — твой личный карьерный чит-код. Я помогу найти лучшие вакансии на HH.ru и напишу за тебя идеальное сопроводительное письмо, от которого HR не сможет отказаться.\n\n"
+        "🛠 **Как это работает (3 простых шага):**\n"
+        "1️⃣ **Отправь мне свое резюме** файлом в формате `.pdf` (можно просто скачать с HH.ru) ИЛИ напиши текстом, кто ты и какой у тебя опыт.\n"
+        "2️⃣ Я проанализирую твой опыт и выдам список самых подходящих свежих вакансий.\n"
+        "3️⃣ Выбери любую вакансию, и я за 10 секунд сгенерирую пробивной отклик и пришлю его в готовом `.docx` файле.\n\n"
+        "👇 **Жду твой PDF или текст прямо сюда!**"
+    )
+    await message.answer(welcome_text, parse_mode="Markdown")
+
+# --- ДОБАВЛЕНА КОМАНДА HELP ---
+@dp.message(Command("help"))
+async def cmd_help(message: types.Message):
+    help_text = (
+        "💡 **Инструкция к JobHack AI**\n\n"
+        "• **Чтобы начать поиск:** просто отправь мне файл `.pdf` с твоим резюме или напиши текстом свою профессию и опыт.\n"
+        "• **Если вакансии не нравятся:** нажми кнопку «Показать еще вакансии» под списком.\n"
+        "• **Если не нравится текст письма:** нажми «🔄 Переписать письмо» под сгенерированным откликом.\n\n"
+        "Остались вопросы или нашел баг? Пиши фаундеру."
+    )
+    await message.answer(help_text, parse_mode="Markdown")
 
 @dp.message(F.document)
 async def handle_pdf(message: types.Message):
     if not message.document.file_name.lower().endswith('.pdf'):
-        return await message.answer("❌ Пожалуйста, пришли файл в формате PDF.")
+        return await message.answer("❌ Пожалуйста, пришли файл в формате `.pdf`.", parse_mode="Markdown")
     status = await message.answer("⏳ Читаю твое резюме...")
     try:
         file = await bot.get_file(message.document.file_id)
@@ -88,7 +112,7 @@ async def handle_pdf(message: types.Message):
         await status.edit_text(f"✅ Резюме сохранено!\n🔎 Ищу лучшие вакансии по запросу: **{q}**", parse_mode="Markdown")
         await send_vacancies_block(message, q, page=0, is_edit=False, status_msg=status)
     except Exception as e:
-        await status.edit_text("❌ Ошибка при чтении файла.")
+        await status.edit_text("❌ Ошибка при чтении файла. Убедись, что это текстовый PDF, а не просто картинка.")
 
 @dp.message(F.text & ~F.text.startswith('/') & ~F.text.contains("hh.ru"))
 async def handle_text(message: types.Message):
@@ -148,7 +172,6 @@ async def handle_more_vacancies(callback: types.CallbackQuery):
 async def handle_apply(callback: types.CallbackQuery):
     await callback.answer() 
     v_id = callback.data.split("_")[1]
-    # ДОБАВЛЕН parse_mode="Markdown" сюда
     status_msg = await callback.message.answer(
         "⏳ **JobHack AI** анализирует вакансию и пишет оффер...\nОбычно это занимает 5-10 секунд.", 
         parse_mode="Markdown"
@@ -159,7 +182,6 @@ async def handle_apply(callback: types.CallbackQuery):
 async def handle_reapply(callback: types.CallbackQuery):
     await callback.answer()
     v_id = callback.data.split("_")[1]
-    # ДОБАВЛЕН parse_mode="Markdown" сюда
     await callback.message.edit_text(
         "⏳ **JobHack AI** придумывает новый вариант...\nПодожди пару секунд.", 
         parse_mode="Markdown"
@@ -216,7 +238,7 @@ async def generate_and_send_cover(user_id: int, v_id: str, message_to_edit: type
 
 # 4. ЗАПУСК
 async def main():
-    logger.info("🚀 Бот запущен (parse_mode добавлен во все статусы)")
+    logger.info("🚀 Бот запущен (Добавлен Onboarding и команда /help)")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
