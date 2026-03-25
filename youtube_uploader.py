@@ -46,75 +46,46 @@ def format_youtube_date(date_str):
     # YouTube требует формат: 2026-03-26T18:00:00.000Z
     return dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-def main():
-    print("🔄 Подключение к YouTube API...")
-    youtube = get_youtube_service()
-
-    print("📊 Подключение к Google Таблице...")
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-    gc = gspread.authorize(creds)
-    sheet = gc.open(SHEET_NAME).sheet1
-    READY_VIDEOS_DIR = "ready_videos"
-    
-    records = sheet.get_all_records()
-    
-    for i, row in enumerate(records, start=2):
-        # Ищем колонки по их заголовкам
-        status = row.get('Status', '')
+def upload_video(youtube, filename, title, description, iso_date):
+    """Выполняет загрузку видео в YouTube."""
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"Файл {filename} не найден!")
         
-        if status == 'DONE':
-            yt_title = row.get('YT Title', 'JobHack AI Shorts')
-            yt_desc = row.get('YT Description', '#shorts #jobhackai')
-            post_date = row.get('Post Date', '')
-            
-            iso_date = format_youtube_date(post_date)
-            
-            # Генератор сохраняет видео как `ready_videos/video_{row_index}.mp4`
-            filename = f"ready_videos/video_{i}.mp4"
-            
-            if not os.path.exists(filename):
-                print(f"❌ ОШИБКА: Файл {filename} не найден в папке! Пропускаем строку {i}.")
-                continue
-                
-            print(f"\n🚀 НАЧИНАЕМ ЗАГРУЗКУ: {filename}")
-            print(f"📅 Дата публикации: {iso_date}")
-            
-            body = {
-                'snippet': {
-                    'title': yt_title,
-                    'description': yt_desc,
-                    'tags': ['работа', 'hr', 'айти', 'jobhack', 'shorts', 'собеседование'],
-                    'categoryId': '27' # 27 - Образование, 22 - Люди и Блоги
-                },
-                'status': {
-                    'privacyStatus': 'private', # Обязательно private для отложенной публикации
-                    'publishAt': iso_date,
-                    'selfDeclaredMadeForKids': False
-                }
-            }
-            
-            try:
-                insert_request = youtube.videos().insert(
-                    part=','.join(body.keys()),
-                    body=body,
-                    media_body=MediaFileUpload(filename, chunksize=-1, resumable=True)
-                )
-                
-                response = None
-                while response is None:
-                    status_upload, response = insert_request.next_chunk()
-                    if status_upload:
-                        print(f"⏳ Загружено: {int(status_upload.progress() * 100)}%")
-                
-                print(f"✅ ВИДЕО УСПЕШНО ЗАГРУЖЕНО! ID: {response['id']}")
-                
-                # Обновляем статус в таблице на SCHEDULED
-                # Предполагаем, что Status - это колонка E (индекс 5). Если F, то измени 5 на 6!
-                sheet.update_cell(i, 5, "SCHEDULED") 
-                
-            except Exception as e:
-                print(f"❌ ПРОИЗОШЛА ОШИБКА ПРИ ЗАГРУЗКЕ: {e}")
+    print(f"\n🚀 НАЧИНАЕМ ЗАГРУЗКУ: {filename}")
+    print(f"📅 Дата публикации: {iso_date}")
+    
+    body = {
+        'snippet': {
+            'title': title,
+            'description': description,
+            'tags': ['работа', 'hr', 'айти', 'jobhack', 'shorts', 'собеседование'],
+            'categoryId': '27' # 27 - Образование, 22 - Люди и Блоги
+        },
+        'status': {
+            'privacyStatus': 'private', # Обязательно private для отложенной публикации
+            'publishAt': iso_date,
+            'selfDeclaredMadeForKids': False
+        }
+    }
+    
+    from googleapiclient.http import MediaFileUpload
+    insert_request = youtube.videos().insert(
+        part=','.join(body.keys()),
+        body=body,
+        media_body=MediaFileUpload(filename, chunksize=-1, resumable=True)
+    )
+    
+    response = None
+    while response is None:
+        status_upload, response = insert_request.next_chunk()
+        if status_upload:
+            print(f"⏳ Загружено: {int(status_upload.progress() * 100)}%")
+    
+    print(f"✅ ВИДЕО УСПЕШНО ЗАГРУЖЕНО! ID: {response['id']}")
+    return response['id']
 
+def main():
+    print("🔄 Эта функция теперь должна вызываться через autoposter.py")
+    
 if __name__ == '__main__':
     main()
